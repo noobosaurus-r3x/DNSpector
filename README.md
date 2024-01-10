@@ -95,5 +95,3 @@ Special thanks to all the open-source tools and their contributors that made DNS
 
 This project stands on the shoulders of these giants in the spirit of collaboration and open knowledge.
 
-ChatGPT was used during the process.
-
