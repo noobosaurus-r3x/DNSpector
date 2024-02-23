@@ -20,16 +20,18 @@ def dns_queries(target, nameserver="", record_types=None):
         nameserver = default_ns
         print(colored(f"Using default nameserver: {nameserver}", "cyan"))
 
-    # Check for 'all' keyword in record_types
+    # Normalize record_types to upper case right after determining what they are
     if record_types is None:
-        record_types = ['A']
+        record_types = ['A']  # Default to 'A' if no record types are specified
     elif 'all' in record_types:
-        record_types = VALID_RECORD_TYPES
+        record_types = VALID_RECORD_TYPES  # Assuming VALID_RECORD_TYPES are all in upper case
     else:
-        record_types = [rt for rt in record_types if rt in VALID_RECORD_TYPES]
-        if not record_types:
-            print(colored("Error: No valid DNS record types provided.", "red"))
-            return []
+        # Normalize to upper case for case-insensitive comparison
+        record_types = [rt.upper() for rt in record_types if rt.upper() in VALID_RECORD_TYPES]
+
+    if not record_types:
+        print(colored("Error: No valid DNS record types provided.", "red"))
+        return []
 
     ns_arg = f" @{nameserver}" if nameserver else ""
 
@@ -43,9 +45,11 @@ def dns_queries(target, nameserver="", record_types=None):
             relevant_lines = [line for line in lines if line and not line.startswith(';') and not line.startswith(';;')]
 
             if is_soa_only_output(relevant_lines, record_type):
+                message = f"Query successful but no {record_type} records found for {target}."
                 result_block = (
                     colored(f"\nRecord Type: {record_type}", "header") + "\n" +
-                    colored(f"No {record_type} records found, or the record type is not applicable for this domain.", "warning")
+                    colored("Command:", "blue") + f"\n{cmd}\n" +
+                    colored(message, "warning")
                 )
             else:
                 processed_output = '\n'.join(relevant_lines)
@@ -61,3 +65,4 @@ def dns_queries(target, nameserver="", record_types=None):
             results.append(colored(f"Error while querying {record_type} records for {target}: {str(e)}", "red"))
 
     return results
+
