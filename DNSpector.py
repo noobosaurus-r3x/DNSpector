@@ -17,7 +17,7 @@ def perform_axfr_query(domain, nameserver):
         return False, str(e)
 
 def main():
-    banner = '''
+    banner = r'''
 
     ____  _   _______                 __            
    / __ \/ | / / ___/____  ___  _____/ /_____  _____
