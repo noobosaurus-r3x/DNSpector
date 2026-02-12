@@ -1,7 +1,7 @@
 import dns.resolver
-import subprocess
+import dns.exception
 import re
-from utils import run_command, colored, validate_domain, validate_nameserver
+from utils import colored, validate_domain, validate_nameserver
 
 VALID_RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "NS", "PTR", "SOA", "SRV", "TXT", "CAA", "DNSKEY", "DS", "NAPTR", "RRSIG", "SPF", "TLSA", "URI"]
 
@@ -9,12 +9,18 @@ def is_root_domain(target):
     # Implement logic to check if the target is a root domain
     return target.count('.') <= 1
 
-def is_soa_only_output(relevant_lines, record_type):
-    if not relevant_lines or record_type in ["PTR", "SRV", "DNSKEY", "DS", "NAPTR", "RRSIG", "SPF", "TLSA", "URI"]:
-        return True
-    return all(' IN SOA ' in line for line in relevant_lines) and record_type != "SOA"
-
 def dns_queries(target, nameserver="", record_types=None):
+    """
+    Query DNS records for a target domain using dnspython.
+    
+    Args:
+        target: Domain name to query
+        nameserver: DNS server to use (optional, uses default if not specified)
+        record_types: List of record types or 'all' (default: ['A'])
+    
+    Returns:
+        List of formatted result strings
+    """
     # Validate inputs to prevent injection
     if not validate_domain(target):
         print(colored(f"Error: Invalid domain name: {target}", "red"))
@@ -24,16 +30,20 @@ def dns_queries(target, nameserver="", record_types=None):
         print(colored(f"Error: Invalid nameserver: {nameserver}", "red"))
         return []
 
-    if not nameserver:
-        default_ns = dns.resolver.get_default_resolver().nameservers[0]
-        nameserver = default_ns
-        print(colored(f"Using default nameserver: {nameserver}", "cyan"))
+    # Configure resolver
+    resolver = dns.resolver.Resolver()
+    if nameserver:
+        resolver.nameservers = [nameserver]
+        print(colored(f"Using nameserver: {nameserver}", "cyan"))
+    else:
+        default_ns = resolver.nameservers[0]
+        print(colored(f"Using default nameserver: {default_ns}", "cyan"))
 
-    # Normalize record_types to upper case right after determining what they are
+    # Normalize record_types to upper case
     if record_types is None:
         record_types = ['A']  # Default to 'A' if no record types are specified
     elif 'all' in record_types:
-        record_types = VALID_RECORD_TYPES  # Assuming VALID_RECORD_TYPES are all in upper case
+        record_types = VALID_RECORD_TYPES
     else:
         # Normalize to upper case for case-insensitive comparison
         record_types = [rt.upper() for rt in record_types if rt.upper() in VALID_RECORD_TYPES]
@@ -45,35 +55,74 @@ def dns_queries(target, nameserver="", record_types=None):
     results = []
     for record_type in record_types:
         try:
-            # Build command as list to avoid shell injection
-            cmd_list = ["dig", record_type, target]
-            if nameserver:
-                cmd_list.append(f"@{nameserver}")
-            cmd_display = ' '.join(cmd_list)
-            output = run_command(cmd_list)
-
-            lines = output.split('\n')
-            relevant_lines = [line for line in lines if line and not line.startswith(';') and not line.startswith(';;')]
-
-            if is_soa_only_output(relevant_lines, record_type):
-                message = f"Query successful but no {record_type} records found for {target}."
-                result_block = (
-                    colored(f"\nRecord Type: {record_type}", "header") + "\n" +
-                    colored("Command:", "blue") + f"\n{cmd_display}\n" +
-                    colored(message, "warning")
-                )
-            else:
-                processed_output = '\n'.join(relevant_lines)
-                result_block = (
-                    colored(f"\nRecord Type: {record_type}", "header") + "\n" +
-                    colored("Command:", "blue") + f"\n{cmd_display}\n" +
-                    colored("Processed Output:", "cyan") + "\n" + processed_output +
-                    "\n" + "-"*40  # Separator line
-                )
+            # Query using dnspython
+            answers = resolver.resolve(target, record_type)
+            
+            # Format output similar to dig
+            output_lines = []
+            for answer in answers:
+                # Format based on record type for readability
+                if record_type in ['A', 'AAAA']:
+                    output_lines.append(f"{target}.\t\tIN\t{record_type}\t{answer.address}")
+                elif record_type == 'MX':
+                    output_lines.append(f"{target}.\t\tIN\tMX\t{answer.preference} {answer.exchange}.")
+                elif record_type == 'NS':
+                    output_lines.append(f"{target}.\t\tIN\tNS\t{answer.target}.")
+                elif record_type == 'CNAME':
+                    output_lines.append(f"{target}.\t\tIN\tCNAME\t{answer.target}.")
+                elif record_type == 'SOA':
+                    output_lines.append(f"{target}.\t\tIN\tSOA\t{answer.mname}. {answer.rname}. {answer.serial} {answer.refresh} {answer.retry} {answer.expire} {answer.minimum}")
+                elif record_type == 'TXT':
+                    # TXT records can have multiple strings
+                    txt_value = ' '.join([s.decode() if isinstance(s, bytes) else str(s) for s in answer.strings])
+                    output_lines.append(f"{target}.\t\tIN\tTXT\t\"{txt_value}\"")
+                elif record_type == 'SRV':
+                    output_lines.append(f"{target}.\t\tIN\tSRV\t{answer.priority} {answer.weight} {answer.port} {answer.target}.")
+                else:
+                    # Generic formatting for other record types
+                    output_lines.append(f"{target}.\t\tIN\t{record_type}\t{str(answer)}")
+            
+            processed_output = '\n'.join(output_lines)
+            result_block = (
+                colored(f"\nRecord Type: {record_type}", "header") + "\n" +
+                colored("Processed Output:", "cyan") + "\n" + processed_output +
+                "\n" + "-"*40  # Separator line
+            )
             results.append(result_block)
 
+        except dns.resolver.NXDOMAIN:
+            message = f"Domain {target} does not exist (NXDOMAIN)."
+            result_block = (
+                colored(f"\nRecord Type: {record_type}", "header") + "\n" +
+                colored(message, "warning")
+            )
+            results.append(result_block)
+        
+        except dns.resolver.NoAnswer:
+            message = f"Query successful but no {record_type} records found for {target}."
+            result_block = (
+                colored(f"\nRecord Type: {record_type}", "header") + "\n" +
+                colored(message, "warning")
+            )
+            results.append(result_block)
+        
+        except dns.resolver.NoNameservers:
+            message = f"No nameservers available to answer query for {target}."
+            result_block = (
+                colored(f"\nRecord Type: {record_type}", "header") + "\n" +
+                colored(message, "red")
+            )
+            results.append(result_block)
+        
+        except dns.exception.Timeout:
+            message = f"Query timeout while looking up {record_type} records for {target}."
+            result_block = (
+                colored(f"\nRecord Type: {record_type}", "header") + "\n" +
+                colored(message, "red")
+            )
+            results.append(result_block)
+        
         except Exception as e:
             results.append(colored(f"Error while querying {record_type} records for {target}: {str(e)}", "red"))
 
     return results
-
