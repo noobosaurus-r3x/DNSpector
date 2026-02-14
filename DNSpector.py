@@ -6,6 +6,7 @@ from dns_module import dns_queries
 from whois_module import get_whois_data
 from subdomain_module import fetch_all_subdomains
 from utils import colored
+from constants import __version__, RECORD_DESCRIPTIONS
 
 def perform_axfr_query(domain, nameserver):
     try:
@@ -27,15 +28,32 @@ def main():
                  /_/                                
 '''
     print(banner)
-    print("DNSpector - DNS Enumeration and Analysis Tool")
+    print(f"DNSpector v{__version__} - DNS Enumeration and Analysis Tool")
+    print()
 
-    parser = argparse.ArgumentParser(description="DNS Enumeration and Analysis Tool")
-    parser.add_argument("target", help="Target domain")
-    parser.add_argument("-n", "--nameserver", help="Nameserver/IP to use", default="")
-    parser.add_argument("-r", "--records", nargs="*", help="Specific DNS record types to query", default=None)
-    parser.add_argument("-w", "--whois", help="Perform a WHOIS lookup", action="store_true")
-    parser.add_argument("-sd", "--subdomain", help="Perform passive subdomain enumeration", action="store_true")
-    parser.add_argument("-zt", "--zone-transfer", help="Perform a Zone Transfer Check", action="store_true")
+    # Build epilog with record type descriptions
+    record_help = "\nSupported DNS record types:\n"
+    for record_type, description in sorted(RECORD_DESCRIPTIONS.items()):
+        record_help += f"  {record_type:10} - {description}\n"
+    
+    epilog = record_help + "\nExamples:\n"
+    epilog += "  python DNSpector.py example.com -r A AAAA MX\n"
+    epilog += "  python DNSpector.py example.com -r all --whois\n"
+    epilog += "  python DNSpector.py example.com --subdomain\n"
+    epilog += "  python DNSpector.py example.com -n 8.8.8.8 --zone-transfer\n"
+
+    parser = argparse.ArgumentParser(
+        description="DNS Enumeration and Analysis Tool for Security Research",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("target", help="Target domain to analyze")
+    parser.add_argument("-n", "--nameserver", help="Nameserver/IP to use for queries (default: system resolver)", default="", metavar="NS")
+    parser.add_argument("-r", "--records", nargs="*", help="DNS record types to query (use 'all' for all types)", default=None, metavar="TYPE")
+    parser.add_argument("-w", "--whois", help="Perform WHOIS domain registration lookup", action="store_true")
+    parser.add_argument("-sd", "--subdomain", help="Perform passive subdomain enumeration from public sources", action="store_true")
+    parser.add_argument("-zt", "--zone-transfer", help="Test for misconfigured zone transfer (AXFR)", action="store_true")
+    parser.add_argument("--version", action="version", version=f"DNSpector {__version__}")
 
     args = parser.parse_args()
 
