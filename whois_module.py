@@ -9,15 +9,23 @@ def get_whois_data(domain):
         def format_field(field):
             return field if field is not None else "Not Available"
 
+        def format_list(field):
+            """Format list fields, handling None and non-list values"""
+            if field is None:
+                return "Not Available"
+            if isinstance(field, list):
+                return "\n - ".join(str(item) for item in field)
+            return str(field)
+
         formatted_data = colored("WHOIS Data:", "header") + "\n"
         formatted_data += colored("Domain Name:", "blue") + f" {format_field(w.domain_name)}\n"
         formatted_data += colored("Registrar:", "blue") + f" {format_field(w.registrar)}\n"
         formatted_data += colored("Updated Date:", "blue") + f" {format_field(w.updated_date)}\n"
         formatted_data += colored("Creation Date:", "blue") + f" {format_field(w.creation_date)}\n"
         formatted_data += colored("Expiration Date:", "blue") + f" {format_field(w.expiration_date)}\n"
-        formatted_data += colored("Name Servers:", "blue") + "\n - " + "\n - ".join(format_field(w.name_servers)) + "\n"
-        formatted_data += colored("Status:", "blue") + "\n - " + "\n - ".join(format_field(w.status)) + "\n"
-        formatted_data += colored("Emails:", "blue") + "\n - " + "\n - ".join(format_field(w.emails)) + "\n"
+        formatted_data += colored("Name Servers:", "blue") + "\n - " + format_list(w.name_servers) + "\n"
+        formatted_data += colored("Status:", "blue") + "\n - " + format_list(w.status) + "\n"
+        formatted_data += colored("Emails:", "blue") + "\n - " + format_list(w.emails) + "\n"
         formatted_data += colored("DNSSEC:", "blue") + f" {format_field(w.dnssec)}\n"
         formatted_data += colored("Registrant Info:", "blue") + "\n"
         formatted_data += "  Name: " + format_field(w.name) + "\n"
