@@ -8,9 +8,9 @@ from subdomain_module import fetch_all_subdomains
 from utils import colored
 from constants import __version__, RECORD_DESCRIPTIONS
 
-def perform_axfr_query(domain, nameserver):
+def perform_axfr_query(domain, nameserver, timeout=10):
     try:
-        zone_transfer = dns.query.xfr(nameserver, domain, lifetime=10)
+        zone_transfer = dns.query.xfr(nameserver, domain, lifetime=timeout)
         zone = dns.zone.from_xfr(zone_transfer)
         records = [zone[n].to_text(n) for n in zone.nodes.keys()]
         return True, "\n".join(records)
@@ -27,10 +27,6 @@ def main():
 /_____/_/ |_//____/ .___/\___/\___/\__/\____/_/     
                  /_/                                
 '''
-    print(banner)
-    print(f"DNSpector v{__version__} - DNS Enumeration and Analysis Tool")
-    print()
-
     # Build epilog with record type descriptions
     record_help = "\nSupported DNS record types:\n"
     for record_type, description in sorted(RECORD_DESCRIPTIONS.items()):
@@ -53,9 +49,17 @@ def main():
     parser.add_argument("-w", "--whois", help="Perform WHOIS domain registration lookup", action="store_true")
     parser.add_argument("-sd", "--subdomain", help="Perform passive subdomain enumeration from public sources", action="store_true")
     parser.add_argument("-zt", "--zone-transfer", help="Test for misconfigured zone transfer (AXFR)", action="store_true")
+    parser.add_argument("-q", "--quiet", help="Suppress banner and non-essential output", action="store_true")
+    parser.add_argument("-t", "--timeout", type=float, default=5.0, help="Query timeout in seconds (default: 5.0)", metavar="SEC")
     parser.add_argument("--version", action="version", version=f"DNSpector {__version__}")
 
     args = parser.parse_args()
+
+    # Display banner unless --quiet
+    if not args.quiet:
+        print(banner)
+        print(f"DNSpector v{__version__} - DNS Enumeration and Analysis Tool")
+        print()
 
     try:
         if args.target:
@@ -66,7 +70,7 @@ def main():
             if args.records:
                 if 'all' in args.records and 'axfr' in args.records:
                     args.records.remove('axfr')
-                dns_results = dns_queries(args.target, args.nameserver, args.records)
+                dns_results = dns_queries(args.target, args.nameserver, args.records, args.timeout)
                 for result in dns_results:
                     print(result)
 
@@ -78,7 +82,7 @@ def main():
 
             # Zone Transfer Check
             if args.zone_transfer:
-                success, axfr_result = perform_axfr_query(args.target, args.nameserver)
+                success, axfr_result = perform_axfr_query(args.target, args.nameserver, args.timeout)
                 if success:
                     print(colored("\nZone Transfer Results:", "header"))
                     print(axfr_result)
