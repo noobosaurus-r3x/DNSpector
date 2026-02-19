@@ -9,7 +9,7 @@ def is_root_domain(target):
     # Implement logic to check if the target is a root domain
     return target.count('.') <= 1
 
-def dns_queries(target, nameserver="", record_types=None):
+def dns_queries(target, nameserver="", record_types=None, timeout=5.0):
     """
     Query DNS records for a target domain using dnspython.
     
@@ -17,6 +17,7 @@ def dns_queries(target, nameserver="", record_types=None):
         target: Domain name to query
         nameserver: DNS server to use (optional, uses default if not specified)
         record_types: List of record types or 'all' (default: ['A'])
+        timeout: Query timeout in seconds (default: 5.0)
     
     Returns:
         List of formatted result strings
@@ -32,6 +33,8 @@ def dns_queries(target, nameserver="", record_types=None):
 
     # Configure resolver
     resolver = dns.resolver.Resolver()
+    resolver.timeout = timeout
+    resolver.lifetime = timeout
     if nameserver:
         resolver.nameservers = [nameserver]
         print(colored(f"Using nameserver: {nameserver}", "cyan"))
